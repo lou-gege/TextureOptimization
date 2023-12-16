@@ -14,14 +14,14 @@ std::vector<uint8_t> GPUSampler::Sample(float u, float v)
 	glfwInit();
 	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
-	GLFWwindow* window = glfwCreateWindow(m_width, m_height, "GPUSampler", NULL, NULL);
-	if (window == NULL)
+	m_Window = glfwCreateWindow(m_width, m_height, "GPUSampler", NULL, NULL);
+	if (m_Window == NULL)
 	{
 		std::cerr << "Failed to create GLFW window" << std::endl;
 		glfwTerminate();
 		exit(1);
 	}
-	glfwMakeContextCurrent(window);
+	glfwMakeContextCurrent(m_Window);
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
@@ -43,17 +43,17 @@ std::vector<uint8_t> GPUSampler::Sample(float u, float v)
 	 1.0f,  1.0f, 0.0f,
 	 1.0f, -1.0f, 0.0f,
 	-1.0f, -1.0f, 0.0f,
-	-1.0f,  1.0f, 0.0f 
+	-1.0f,  1.0f, 0.0f
 	};
 	unsigned int indices[] = {
 		0, 1, 3,
-		1, 2, 3 
+		1, 2, 3
 	};
-	unsigned int VBO, VAO, EBO;
-	glGenVertexArrays(1, &VAO);
+	unsigned int VBO, m_VAO, EBO;
+	glGenVertexArrays(1, &m_VAO);
 	glGenBuffers(1, &VBO);
 	glGenBuffers(1, &EBO);
-	glBindVertexArray(VAO);
+	glBindVertexArray(m_VAO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -85,32 +85,83 @@ std::vector<uint8_t> GPUSampler::Sample(float u, float v)
 
     void main() {
         color = texture(Texture, texCoord);
+        // color = vec4(229.5373/255.0, 229.5374/255.0, 229.5373/255.0, 1.0);
     }
 )";
 
-	GLuint shaderProgram = CreateShaderProgram(vertexShaderSource, fragmentShaderSource);
-	glUseProgram(shaderProgram);
-	glUniform1i(glGetUniformLocation(shaderProgram, "Texture"), 0);
-	glUniform2f(glGetUniformLocation(shaderProgram, "texCoord"), u, v);
+	m_ShaderProgram = CreateShaderProgram(vertexShaderSource, fragmentShaderSource);
+
+
+
+
+	// 创建帧缓冲对象
+	GLuint framebuffer;
+	glGenFramebuffers(1, &framebuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+	// 创建纹理附件
+	GLuint textureColorbuffer;
+	glGenTextures(1, &textureColorbuffer);
+	glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, m_width, m_height, 0, GL_RGB, GL_FLOAT, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, 1.0f);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureColorbuffer, 0);
+
+	// 检查帧缓冲完整性
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		std::cout << "Framebuffer is not complete!" << std::endl;
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	// 渲染到帧缓冲
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+	glUseProgram(m_ShaderProgram);
+	glUniform1i(glGetUniformLocation(m_ShaderProgram, "Texture"), 0);
+	glUniform2f(glGetUniformLocation(m_ShaderProgram, "texCoord"), u, v);
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, m_TexID);
 
+	// 进行渲染操作，绘制到帧缓冲
 	glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
-	glBindVertexArray(VAO);
+	glBindVertexArray(m_VAO);
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-	glfwSwapBuffers(window);
+	glfwSwapBuffers(m_Window);
 
-	GLubyte pixel[3];
-	glReadBuffer(GL_FRONT);
-	glReadPixels(0, 0, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel);
+	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	// 读取帧缓冲内容到内存中
+	unsigned char* pixels = new unsigned char[m_width * m_height * 3]; // 800x600像素的RGB图像
+	glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+	glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+
+	//unsigned char r = pixels[0];
+	//unsigned char g = pixels[1];
+	//unsigned char b = pixels[2];
+
+
+	//glPixelTransferf()
+
+	//GLubyte pixel[3];
+	//glReadBuffer(GL_FRONT);
+	//glReadPixels(0, 0, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel);
+
+	//float r = pixel[0] * 255.0f;
+
+	glfwDestroyWindow(m_Window);
 
 	std::vector<uint8_t> color(m_channels);
 	for (int channel = 0; channel < m_channels; channel++)
 	{
-		color[channel] = static_cast<uint8_t>(pixel[channel]);
+		color[channel] = static_cast<uint8_t>(pixels[channel]);
 	}
 
 	return color;

@@ -84,7 +84,8 @@ project "GradientDescent"
 	links
 	{
 		"GLFW",
-		"Glad"
+		"Glad",
+		"opengl32.lib"
 	}
 
 	filter "system:windows"

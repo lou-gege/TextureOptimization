@@ -11,6 +11,7 @@ public class Sample : MonoBehaviour
 
     public Material samplingMaterial;
     public Material gpuDeltaMaterial;
+    public Material gpuGatherMaterial;
 
     void Start()
     {
@@ -42,10 +43,14 @@ public class Sample : MonoBehaviour
         float mse_gpu_mipmap = CalculateMSE_GPU_MipMap();
         Debug.Log("MSE GPU MipMap: " + mse_gpu_mipmap);
 
+        float mse_gpu_gather = CalculateMse_GPU_Gather();
+        Debug.Log("MSE GPU Gather: " + mse_gpu_gather);
+
         // PSNR Calculate
         Debug.Log("PSNR CPU: " + CalculatePSNR(mse_cpu));
         Debug.Log("PSNR GPU Delta: " + CalculatePSNR(mse_gpu_delta));
         Debug.Log("PSNR GPU MipMap: " + CalculatePSNR(mse_gpu_mipmap));
+        Debug.Log("PSNR GPU Gather: " + CalculatePSNR(mse_gpu_gather));
 
     }
 
@@ -108,6 +113,34 @@ public class Sample : MonoBehaviour
         Color[] texPixels = deltaTexture.GetPixels(maxLevel);
 
         return texPixels[0].r / 3;
+    }
+
+    float CalculateMse_GPU_Gather()
+    {
+        int maxLevel = (int)Mathf.Log(Mathf.Max(deltaRenderTexture.width, deltaRenderTexture.height), 2);
+        int pixelCount = deltaRenderTexture.width * deltaRenderTexture.height;
+        RenderTexture srcTempRT = deltaRenderTexture;
+        for (int i = 0; i < maxLevel; i++)
+        {
+            RenderTexture destTempRT = new RenderTexture(srcTempRT.width / 2, srcTempRT.height / 2, 0, RenderTextureFormat.RFloat);
+            Graphics.Blit(srcTempRT, destTempRT, gpuGatherMaterial);
+            RenderTexture temp = srcTempRT;
+            srcTempRT = destTempRT;
+            Destroy(temp);
+        }
+
+        RenderTexture.active = srcTempRT;
+        Texture2D resultTexture = new Texture2D(srcTempRT.width, srcTempRT.height, TextureFormat.RFloat, false);
+        resultTexture.ReadPixels(new Rect(0, 0, srcTempRT.width, srcTempRT.height), 0, 0);
+        resultTexture.Apply();
+
+        Color[] texPixels = resultTexture.GetPixels();
+
+        RenderTexture.active = null;
+        Destroy(srcTempRT);
+        Destroy(resultTexture);
+
+        return texPixels[0].r / (3 * pixelCount);
     }
 
     float CalculatePSNR(float mse)

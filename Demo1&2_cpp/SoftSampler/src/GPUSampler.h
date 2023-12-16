@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
 
 class GPUSampler
 {
@@ -15,5 +16,6 @@ private:
 private:
 	unsigned char* m_data;
 	int m_width, m_height, m_channels;
-	uint32_t m_TexID;
+	uint32_t m_TexID, m_ShaderProgram, m_VAO;
+	GLFWwindow* m_Window;
 };
